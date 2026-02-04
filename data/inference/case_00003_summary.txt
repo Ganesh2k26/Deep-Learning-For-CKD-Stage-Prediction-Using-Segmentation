@@ -1,0 +1,3 @@
+Case ID: case_00003
+Predicted CKD Stage: 4
+Per-slice prediction counts: {4: 121, 3: 45, 1: 1}

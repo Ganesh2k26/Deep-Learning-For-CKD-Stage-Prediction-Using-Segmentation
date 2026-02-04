@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pth
+models_ckd/
+logs/
+kits19/
+.env
+.vscode/
+CT_SLICES/
+ data/

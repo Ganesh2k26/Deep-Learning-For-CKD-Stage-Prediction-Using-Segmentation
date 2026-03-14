@@ -1,5 +1,6 @@
 import os
 import uuid
+import time
 
 import cv2
 import numpy as np
@@ -89,12 +90,18 @@ app = Flask(__name__)
 # -----------------------------------------------------------
 # Helper functions
 # -----------------------------------------------------------
-def preprocess_ct_slice(img_bgr):
+def preprocess_ct_slice(img):
     """
-    Input: BGR image from cv2.
+    Input: image from cv2 (BGR or grayscale).
     Output: tensor (1, 1, 512, 512) on DEVICE, plus resized grayscale image.
     """
-    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    if img is None:
+        raise ValueError("preprocess_ct_slice received None image")
+
+    if len(img.shape) == 2:
+        gray = img
+    else:
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     gray = cv2.resize(gray, (512, 512))
     img_norm = gray.astype(np.float32) / 255.0
     img_norm = np.expand_dims(np.expand_dims(img_norm, axis=0), axis=0)  # (1,1,H,W)
@@ -210,6 +217,7 @@ def single_slice():
     }
 
     if request.method == "POST":
+        start_t = time.perf_counter()
         file = request.files.get("ct_image")
         if not file or file.filename == "":
             context["error"] = "Please choose a CT slice image first."
@@ -217,14 +225,14 @@ def single_slice():
 
         # save original upload (optional)
         raw_bytes = np.frombuffer(file.read(), np.uint8)
-        img_bgr = cv2.imdecode(raw_bytes, cv2.IMREAD_COLOR)
+        img_gray = cv2.imdecode(raw_bytes, cv2.IMREAD_GRAYSCALE)
 
-        if img_bgr is None:
+        if img_gray is None:
             context["error"] = "Could not read the image. Please upload .png or .jpg."
             return render_template("index.html", **context)
 
         # ----- segmentation -----
-        img_tensor, ct_gray = preprocess_ct_slice(img_bgr)
+        img_tensor, ct_gray = preprocess_ct_slice(img_gray)
         mask = run_unet_and_get_mask(img_tensor)
         overlay = create_overlay(ct_gray, mask)
         roi = extract_kidney_roi(ct_gray, mask)
@@ -244,6 +252,12 @@ def single_slice():
         cv2.imwrite(mask_path, (mask * 255).astype(np.uint8))
         cv2.imwrite(overlay_path, overlay)
         cv2.imwrite(roi_path, roi)
+
+        # Enforce a minimum response time so the UI spinner is visible.
+        elapsed = time.perf_counter() - start_t
+        min_seconds = 2.0
+        if elapsed < min_seconds:
+            time.sleep(min_seconds - elapsed)
 
         # paths for template (relative to /static)
         context.update(
@@ -289,11 +303,11 @@ def whole_case():
 
                 for fname in all_files:
                     path = os.path.join(CT_SLICES_DIR, fname)
-                    img_bgr = cv2.imread(path, cv2.IMREAD_COLOR)
-                    if img_bgr is None:
+                    img_gray = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+                    if img_gray is None:
                         continue
 
-                    img_tensor, ct_gray = preprocess_ct_slice(img_bgr)
+                    img_tensor, ct_gray = preprocess_ct_slice(img_gray)
                     mask = run_unet_and_get_mask(img_tensor)
                     roi = extract_kidney_roi(ct_gray, mask)
                     probs, _ = classify_roi(roi)

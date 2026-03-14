@@ -2,7 +2,6 @@ __pycache__/
 *.pyc
 *.pth
 
-models_ckd/
 logs/
 kits19/
 CT_SLICES/

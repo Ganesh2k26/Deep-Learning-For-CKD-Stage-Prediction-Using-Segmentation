@@ -1,12 +1,13 @@
 import os
 import uuid
 import time
+import random
 
 import cv2
 import numpy as np
 import torch
 import torch.nn.functional as F
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, jsonify
 
 from src.models.unet import UNet
 from src.models.efficientnet_ckd import EfficientNetCKD
@@ -41,6 +42,10 @@ CT_SLICES_DIR = os.path.join(ROOT, "data", "raw", "ct_slices")
 
 STATIC_RESULTS_DIR = os.path.join(ROOT, "static", "results")
 os.makedirs(STATIC_RESULTS_DIR, exist_ok=True)
+
+# Directory for built‑in demo CT slices used by the "Sample test" button.
+DEMO_SAMPLES_DIR = os.path.join(ROOT, "static", "demo_samples")
+os.makedirs(DEMO_SAMPLES_DIR, exist_ok=True)
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -195,6 +200,52 @@ def stage_summary_text(stage: int) -> str:
     return f"{info['summary']} Recommended next steps: {info['care']}"
 
 
+def base_context() -> dict:
+    """Base template context used for the single-slice page."""
+    return {
+        "result_ready": False,
+        "stage_info": STAGE_INFO,
+    }
+
+
+def analyze_ct_image(img_gray: np.ndarray) -> dict:
+    """
+    Run the full segmentation → ROI → classification pipeline for a single CT slice.
+
+    Returns a context dict that can be merged into the template context.
+    """
+    img_tensor, ct_gray = preprocess_ct_slice(img_gray)
+    mask = run_unet_and_get_mask(img_tensor)
+    overlay = create_overlay(ct_gray, mask)
+    roi = extract_kidney_roi(ct_gray, mask)
+
+    probs, pred_stage = classify_roi(roi)
+    summary = stage_summary_text(pred_stage)
+
+    uid = uuid.uuid4().hex[:8]
+    ct_path = os.path.join(STATIC_RESULTS_DIR, f"{uid}_ct.png")
+    mask_path = os.path.join(STATIC_RESULTS_DIR, f"{uid}_mask.png")
+    overlay_path = os.path.join(STATIC_RESULTS_DIR, f"{uid}_overlay.png")
+    roi_path = os.path.join(STATIC_RESULTS_DIR, f"{uid}_roi.png")
+
+    cv2.imwrite(ct_path, ct_gray)
+    cv2.imwrite(mask_path, (mask * 255).astype(np.uint8))
+    cv2.imwrite(overlay_path, overlay)
+    cv2.imwrite(roi_path, roi)
+
+    return {
+        "result_ready": True,
+        "pred_stage": pred_stage,
+        "pred_stage_label": STAGE_INFO[pred_stage]["title"],
+        "stage_details": STAGE_INFO[pred_stage],
+        "summary": summary,
+        "img_ct": url_for("static", filename=f"results/{os.path.basename(ct_path)}"),
+        "img_mask": url_for("static", filename=f"results/{os.path.basename(mask_path)}"),
+        "img_overlay": url_for("static", filename=f"results/{os.path.basename(overlay_path)}"),
+        "img_roi": url_for("static", filename=f"results/{os.path.basename(roi_path)}"),
+    }
+
+
 # -----------------------------------------------------------
 # Routes
 # -----------------------------------------------------------
@@ -208,50 +259,78 @@ def home():
 @app.route("/slice", methods=["GET", "POST"])
 def single_slice():
     """
-    Page 1: upload a single CT slice.
+    Page 1: upload a single CT slice or trigger a built-in demo sample.
     Shows: stage, stage meaning, probs, images, summary.
     """
-    context = {
-        "result_ready": False,
-        "stage_info": STAGE_INFO,
-    }
+    context = base_context()
 
     if request.method == "POST":
         start_t = time.perf_counter()
-        file = request.files.get("ct_image")
-        if not file or file.filename == "":
-            context["error"] = "Please choose a CT slice image first."
-            return render_template("index.html", **context)
+        use_demo = request.form.get("use_demo") == "1"
 
-        # save original upload (optional)
-        raw_bytes = np.frombuffer(file.read(), np.uint8)
-        img_gray = cv2.imdecode(raw_bytes, cv2.IMREAD_GRAYSCALE)
+        if use_demo:
+            # If the client already selected a specific demo image, use that;
+            # otherwise fall back to picking one on the server.
+            demo_rel = request.form.get("demo_rel", "").strip()
+            sample_path = None
 
-        if img_gray is None:
-            context["error"] = "Could not read the image. Please upload .png or .jpg."
-            return render_template("index.html", **context)
+            if demo_rel:
+                # demo_rel is like "demo_samples/xxx.png" or "results/yyy_ct.png"
+                if demo_rel.startswith("demo_samples/"):
+                    sample_path = os.path.join(DEMO_SAMPLES_DIR, demo_rel.split("/", 1)[1])
+                elif demo_rel.startswith("results/"):
+                    sample_path = os.path.join(STATIC_RESULTS_DIR, demo_rel.split("/", 1)[1])
 
-        # ----- segmentation -----
-        img_tensor, ct_gray = preprocess_ct_slice(img_gray)
-        mask = run_unet_and_get_mask(img_tensor)
-        overlay = create_overlay(ct_gray, mask)
-        roi = extract_kidney_roi(ct_gray, mask)
+            if not sample_path:
+                # Prefer explicit demo_samples/, but fall back to any *_ct.png
+                # images already present in static/results/ (from previous runs).
+                samples: list[str] = []
+                if os.path.isdir(DEMO_SAMPLES_DIR):
+                    samples.extend(
+                        os.path.join(DEMO_SAMPLES_DIR, f)
+                        for f in os.listdir(DEMO_SAMPLES_DIR)
+                        if f.lower().endswith((".png", ".jpg", ".jpeg"))
+                    )
 
-        # ----- classification -----
-        probs, pred_stage = classify_roi(roi)
-        summary = stage_summary_text(pred_stage)
+                if not samples and os.path.isdir(STATIC_RESULTS_DIR):
+                    samples.extend(
+                        os.path.join(STATIC_RESULTS_DIR, f)
+                        for f in os.listdir(STATIC_RESULTS_DIR)
+                        if f.lower().endswith("_ct.png")
+                    )
 
-        # ----- save images to static/results -----
-        uid = uuid.uuid4().hex[:8]
-        ct_path = os.path.join(STATIC_RESULTS_DIR, f"{uid}_ct.png")
-        mask_path = os.path.join(STATIC_RESULTS_DIR, f"{uid}_mask.png")
-        overlay_path = os.path.join(STATIC_RESULTS_DIR, f"{uid}_overlay.png")
-        roi_path = os.path.join(STATIC_RESULTS_DIR, f"{uid}_roi.png")
+                if not samples:
+                    context["demo_error"] = (
+                        "Demo sample not configured yet. "
+                        "Please add at least one CT slice PNG/JPG to static/demo_samples/ "
+                        "or generate a result once so we can reuse it as a demo."
+                    )
+                    return render_template("index.html", **context)
 
-        cv2.imwrite(ct_path, ct_gray)
-        cv2.imwrite(mask_path, (mask * 255).astype(np.uint8))
-        cv2.imwrite(overlay_path, overlay)
-        cv2.imwrite(roi_path, roi)
+                sample_path = random.choice(samples)
+            img_gray = cv2.imread(sample_path, cv2.IMREAD_GRAYSCALE)
+            if img_gray is None:
+                context["demo_error"] = "Could not read the demo CT slice."
+                return render_template("index.html", **context)
+
+            analysis_ctx = analyze_ct_image(img_gray)
+            analysis_ctx["demo_source"] = os.path.basename(sample_path)
+            context.update(analysis_ctx)
+        else:
+            file = request.files.get("ct_image")
+            if not file or file.filename == "":
+                context["error"] = "Please choose a CT slice image first."
+                return render_template("index.html", **context)
+
+            raw_bytes = np.frombuffer(file.read(), np.uint8)
+            img_gray = cv2.imdecode(raw_bytes, cv2.IMREAD_GRAYSCALE)
+
+            if img_gray is None:
+                context["error"] = "Could not read the image. Please upload .png or .jpg."
+                return render_template("index.html", **context)
+
+            analysis_ctx = analyze_ct_image(img_gray)
+            context.update(analysis_ctx)
 
         # Enforce a minimum response time so the UI spinner is visible.
         elapsed = time.perf_counter() - start_t
@@ -259,84 +338,40 @@ def single_slice():
         if elapsed < min_seconds:
             time.sleep(min_seconds - elapsed)
 
-        # paths for template (relative to /static)
-        context.update(
-            result_ready=True,
-            pred_stage=pred_stage,
-            pred_stage_label=STAGE_INFO[pred_stage]["title"],
-            stage_details=STAGE_INFO[pred_stage],
-            summary=summary,
-            img_ct=url_for("static", filename=f"results/{os.path.basename(ct_path)}"),
-            img_mask=url_for("static", filename=f"results/{os.path.basename(mask_path)}"),
-            img_overlay=url_for("static", filename=f"results/{os.path.basename(overlay_path)}"),
-            img_roi=url_for("static", filename=f"results/{os.path.basename(roi_path)}"),
-        )
-
     return render_template("index.html", **context)
 
 
-@app.route("/case", methods=["GET", "POST"])
-def whole_case():
+@app.route("/api/select-demo", methods=["GET"])
+def select_demo():
     """
-    Page 2: pick a case ID that already exists in data/raw/ct_slices.
-    We run segmentation + classification over all its slices and
-    aggregate probabilities.
+    API helper: pick a demo CT slice (without running the model) so the client
+    can preview it before running segmentation.
     """
-    case_result = None
-    error = None
+    candidates: list[tuple[str, str]] = []  # (source, filename)
 
-    if request.method == "POST":
-        case_id = request.form.get("case_id", "").strip()
-        if not case_id:
-            error = "Please enter a case ID (e.g., case_00050)."
-        else:
-            # find all pngs for this case
-            all_files = sorted(
-                f for f in os.listdir(CT_SLICES_DIR)
-                if f.startswith(case_id) and f.endswith(".png")
-            )
-            if not all_files:
-                error = f"No slices found for {case_id} in data/raw/ct_slices."
-            else:
-                probs_sum = np.zeros(NUM_CLASSES, dtype=np.float64)
-                count = 0
+    if os.path.isdir(DEMO_SAMPLES_DIR):
+        for f in os.listdir(DEMO_SAMPLES_DIR):
+            if f.lower().endswith((".png", ".jpg", ".jpeg")):
+                candidates.append(("demo_samples", f))
 
-                for fname in all_files:
-                    path = os.path.join(CT_SLICES_DIR, fname)
-                    img_gray = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
-                    if img_gray is None:
-                        continue
+    if not candidates and os.path.isdir(STATIC_RESULTS_DIR):
+        for f in os.listdir(STATIC_RESULTS_DIR):
+            if f.lower().endswith("_ct.png"):
+                candidates.append(("results", f))
 
-                    img_tensor, ct_gray = preprocess_ct_slice(img_gray)
-                    mask = run_unet_and_get_mask(img_tensor)
-                    roi = extract_kidney_roi(ct_gray, mask)
-                    probs, _ = classify_roi(roi)
-                    probs_sum += probs
-                    count += 1
+    if not candidates:
+        return jsonify({"ok": False, "message": "No demo CT slices found."}), 404
 
-                if count == 0:
-                    error = f"Could not process slices for {case_id}."
-                else:
-                    avg_probs = probs_sum / count
-                    pred_idx_0 = int(np.argmax(avg_probs))
-                    pred_stage = pred_idx_0 + 1
-                    summary = stage_summary_text(pred_stage)
+    source, fname = random.choice(candidates)
+    rel = f"{source}/{fname}"
+    img_url = url_for("static", filename=rel)
+    return jsonify({"ok": True, "demo_rel": rel, "image_url": img_url})
 
-                    case_result = {
-                        "case_id": case_id,
-                        "pred_stage": pred_stage,
-                        "pred_stage_label": STAGE_INFO[pred_stage]["title"],
-                        "stage_details": STAGE_INFO[pred_stage],
-                        "slice_count": count,
-                        "summary": summary,
-                    }
 
-    return render_template(
-        "case.html",
-        result=case_result,
-        error=error,
-        stage_info=STAGE_INFO,
-    )
+@app.route("/about", methods=["GET"])
+def about():
+    """Static about page describing the application."""
+    return render_template("about.html", stage_info=STAGE_INFO)
 
 
 if __name__ == "__main__":

@@ -8,10 +8,13 @@
       <h2 class="display-6 fw-bold mb-2">Upload a CT slice. Get an interpretable stage.</h2>
       <p class="text-secondary mb-0">Segmentation-driven ROI + EfficientNet classifier. Four clear severity levels with actionable care notes.</p>
     </div>
-    <div class="d-flex gap-2 mt-3 mt-lg-0">
-      <span class="chip">Dice-ready masks</span>
-      <span class="chip">Fast ROI focus</span>
-      <span class="chip">Lag-free UI</span>
+    <div class="hero-orbit d-none d-lg-flex">
+      <div class="orbit-track">
+        <span class="orbit-dot orbit-dot-a"></span>
+      </div>
+      <p class="small text-secondary mb-0 ms-3">
+        Real-time demo pipeline: segmentation → ROI focus → stage prediction.
+      </p>
     </div>
   </div>
 </section>
@@ -27,14 +30,19 @@
         {% if error %}
           <div class="alert alert-danger py-2">{{ error }}</div>
         {% endif %}
+        {% if demo_error %}
+          <div class="alert alert-warning py-2" id="demo-warning">{{ demo_error }}</div>
+        {% endif %}
 
-        <form method="post" enctype="multipart/form-data" data-show-loading="true">
+        <form method="post" enctype="multipart/form-data" data-show-loading="true" id="slice-form">
+          <input type="hidden" name="use_demo" id="use_demo" value="0">
+          <input type="hidden" name="demo_rel" id="demo_rel" value="">
           <div class="mb-3">
-            <div class="dropzone">
+            <label class="dropzone dropzone-button">
+              <span class="dropzone-label fw-semibold">📁 Choose CT slice from device</span>
+              <span class="dropzone-subtext small">PNG or JPG • single sagittal slice with clear kidney visibility</span>
               <input class="form-control form-control-sm" type="file" name="ct_image" accept=".png,.jpg,.jpeg" required>
-              <p class="hint mb-1 fw-semibold">Choose a CT slice (PNG/JPG)</p>
-              <p class="mini small mb-0">Tip: Use a single axial slice with clear kidney visibility.</p>
-            </div>
+            </label>
           </div>
           <div class="mt-3" id="upload-preview" style="display: none;">
             <p class="small text-secondary mb-2 fw-semibold">Selected slice preview</p>
@@ -43,8 +51,11 @@
             </div>
           </div>
           <div class="d-grid gap-2">
-            <button type="submit" class="btn btn-primary" data-loading-submit>
+            <button type="submit" class="btn btn-primary" data-loading-submit id="run-btn">
               Run segmentation & stage
+            </button>
+            <button type="button" class="btn btn-outline-light" id="sample-demo-btn">
+              Sample test (demo slice)
             </button>
             <button type="button" class="btn btn-outline-light" id="clear-panel">Reset view</button>
           </div>
@@ -120,7 +131,11 @@
         {% else %}
           <div class="placeholder-card">
             <h6 class="mb-2">Ready when you are</h6>
-            <p class="small mb-0">Drop in a CT slice to see segmentation, ROI, and severity stage.</p>
+            {% if demo_source %}
+              <p class="small mb-0">Showing a built-in demo slice ({{ demo_source }}). Upload your own CT slice to analyze a new case.</p>
+            {% else %}
+              <p class="small mb-0">Drop in a CT slice to see segmentation, ROI, and severity stage, or use the “Sample test” button to try a demo slice.</p>
+            {% endif %}
           </div>
         {% endif %}
       </div>
@@ -162,11 +177,12 @@
     if (toggle && guide) {
       toggle.addEventListener("click", () => guide.classList.toggle("d-none"));
     }
-    const reset = document.getElementById("clear-panel");
+        const reset = document.getElementById("clear-panel");
     if (reset) {
       reset.addEventListener("click", () => window.location = "{{ url_for('single_slice') }}");
     }
 
+    const form = document.getElementById("slice-form");
     const fileInput = document.querySelector("input[name='ct_image']");
     const previewWrapper = document.getElementById("upload-preview");
     const previewImg = document.getElementById("upload-preview-img");
@@ -188,6 +204,84 @@
           }
         };
         reader.readAsDataURL(file);
+
+        // If the user picks their own image, hide any previous demo warning.
+        const demoWarning = document.getElementById("demo-warning");
+        if (demoWarning) {
+          demoWarning.style.display = "none";
+        }
+      });
+    }
+
+    // Sample test: submit the form asking the server to use a demo slice.
+    const sampleBtn = document.getElementById("sample-demo-btn");
+    const useDemoField = document.getElementById("use_demo");
+    const demoRelField = document.getElementById("demo_rel");
+    const runBtn = document.getElementById("run-btn");
+
+    // When user manually selects a file, treat it as non-demo mode.
+    if (fileInput && useDemoField && demoRelField && sampleBtn) {
+      fileInput.addEventListener("change", () => {
+        if (fileInput.files && fileInput.files.length > 0) {
+          useDemoField.value = "0";
+          demoRelField.value = "";
+          sampleBtn.style.display = "none";
+        } else {
+          sampleBtn.style.display = "";
+        }
+      });
+    }
+
+    if (runBtn && form && fileInput && useDemoField && demoRelField) {
+      runBtn.addEventListener("click", () => {
+        // If we're in demo mode (sample chosen), temporarily relax required
+        // validation so the browser does not block the submit.
+        if (useDemoField.value === "1" && demoRelField.value) {
+          const hadRequired = fileInput.hasAttribute("required");
+          if (hadRequired) {
+            fileInput.removeAttribute("required");
+            // Re-apply after a short delay so a later manual upload still validates.
+            setTimeout(() => {
+              fileInput.setAttribute("required", "required");
+            }, 2000);
+          }
+        }
+      });
+    }
+
+    if (sampleBtn && form && useDemoField && demoRelField && fileInput && previewWrapper && previewImg) {
+      sampleBtn.addEventListener("click", async () => {
+        try {
+          const resp = await fetch("{{ url_for('select_demo') }}");
+          if (!resp.ok) {
+            alert("No demo CT slices are available yet. Please upload and run once, or add a PNG/JPG to static/demo_samples/.");
+            return;
+          }
+          const data = await resp.json();
+          if (!data.ok) {
+            alert(data.message || "Unable to load a demo CT slice.");
+            return;
+          }
+
+          // Mark that we want to use a demo image on next submit.
+          useDemoField.value = "1";
+          demoRelField.value = data.demo_rel || "";
+
+          // Clear any previously selected file so the browser doesn't block submit.
+          fileInput.value = "";
+
+          // Show preview of the selected demo slice.
+          previewImg.src = data.image_url;
+          previewWrapper.style.display = "block";
+
+          const demoWarning = document.getElementById("demo-warning");
+          if (demoWarning) {
+            demoWarning.style.display = "none";
+          }
+        } catch (err) {
+          console.error(err);
+          alert("Something went wrong while picking a demo slice.");
+        }
       });
     }
   });

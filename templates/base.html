@@ -34,8 +34,8 @@
              href="{{ url_for('single_slice') }}">Single Slice</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link {% if request.path.startswith('/case') %}active{% endif %}"
-             href="{{ url_for('whole_case') }}">Whole Case</a>
+          <a class="nav-link {% if request.path.startswith('/about') %}active{% endif %}"
+             href="{{ url_for('about') }}">About</a>
         </li>
         <li class="nav-item">
           <button class="btn btn-outline-light btn-sm ms-lg-2" id="toggle-theme">Glow</button>

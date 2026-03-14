@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block content %}
+
+<section class="hero card card-hero mb-4">
+  <div class="card-body d-lg-flex align-items-center justify-content-between">
+    <div>
+      <p class="eyebrow mb-1">About this application</p>
+      <h2 class="display-6 fw-bold mb-2">CT‑powered CKD Stage Navigator</h2>
+      <p class="text-secondary mb-0">
+        This demo shows how kidney segmentation and stage classification can be combined into a single,
+        explainable workflow for rapid visual triage. It is a research prototype and not a medical device.
+      </p>
+    </div>
+    <div class="d-none d-lg-flex flex-column gap-3">
+      <div class="stat-card">
+        <div class="stat-icon">🧠</div>
+        <div>
+          <div class="small text-secondary">Backbone</div>
+          <div class="fw-semibold">U‑Net + EfficientNet‑B0</div>
+        </div>
+      </div>
+      <div class="about-orbit">
+        <div class="about-orbit-ring about-orbit-ring-outer"></div>
+        <div class="about-orbit-ring about-orbit-ring-inner"></div>
+        <div class="about-orbit-node about-orbit-node-a"></div>
+        <div class="about-orbit-node about-orbit-node-b"></div>
+        <div class="about-orbit-node about-orbit-node-c"></div>
+        <span class="about-orbit-label small">Segmentation · ROI · Stage</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="row g-4">
+  <div class="col-lg-6">
+    <div class="card card-glass h-100">
+      <div class="card-body">
+        <h5 class="card-title mb-3">How the pipeline works</h5>
+        <ul class="timeline mb-0">
+          <li class="item">
+            <p class="mb-1 fw-semibold">1. Upload or sample a CT slice</p>
+            <p class="small text-secondary mb-0">
+              You can upload your own sagittal CT slice or click <strong>Sample test</strong> on the home page
+              to run the model on a built‑in demo slice.
+            </p>
+          </li>
+          <li class="item">
+            <p class="mb-1 fw-semibold">2. Kidney segmentation</p>
+            <p class="small text-secondary mb-0">
+              A U‑Net model isolates the kidney region and produces a high‑resolution mask which is overlaid
+              on the CT image for visual feedback.
+            </p>
+          </li>
+          <li class="item">
+            <p class="mb-1 fw-semibold">3. ROI extraction</p>
+            <p class="small text-secondary mb-0">
+              From the mask, a tight bounding‑box ROI is cropped and resized to a compact 224×224 view,
+              focusing the classifier on renal parenchyma instead of background.
+            </p>
+          </li>
+          <li class="item">
+            <p class="mb-1 fw-semibold">4. Stage classification</p>
+            <p class="small text-secondary mb-0">
+              An EfficientNet‑based classifier predicts one of four CKD stages
+              (1: Well preserved → 4: Advanced). Focal loss is used during training to reduce bias toward
+              over‑represented stages.
+            </p>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card card-glass h-100">
+      <div class="card-body">
+        <h5 class="card-title mb-3">What the stages mean</h5>
+        <div class="row g-3">
+          {% for key, info in stage_info.items() %}
+            <div class="col-sm-6">
+              <div class="guide-card h-100">
+                <p class="small mb-2 fw-semibold" style="color: #475569;">Stage {{ key }}</p>
+                <h6 class="mb-2">{{ info.title }}</h6>
+                <p class="small mb-2" style="color: #334155;">{{ info.summary }}</p>
+                <p class="small mb-0 fw-semibold" style="color: #1e40af;">{{ info.care }}</p>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<section class="mt-4">
+  <div class="card card-glass">
+    <div class="card-body">
+      <h6 class="mb-2 fw-semibold">Usage notes & disclaimer</h6>
+      <p class="small text-secondary mb-1">
+        This web application is intended for experimentation, education, and demonstrating end‑to‑end
+        medical imaging pipelines. It has not been validated for clinical decision making.
+      </p>
+      <p class="small text-secondary mb-0">
+        Predictions should never be used as a substitute for expert radiology or nephrology review.
+        Always consult qualified medical professionals for any diagnostic or treatment decisions.
+      </p>
+    </div>
+  </div>
+</section>
+
+{% endblock %}
+

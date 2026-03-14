@@ -444,12 +444,23 @@ footer.footer {
     background: #e0f2fe;
     box-shadow: 0 0 12px rgba(125, 211, 252, 0.9);
 }
-.orbit-dot-a { top: 11px; left: 8px; animation: orbitSingle 3.2s ease-in-out infinite; }
+.orbit-dot-a { top: 11px; left: 8px; animation: orbitEightA 3.6s ease-in-out infinite; }
+.orbit-dot-b { top: 11px; right: 8px; animation: orbitEightB 3.6s ease-in-out infinite; }
 
-@keyframes orbitSingle {
-    0% { transform: translateX(0) translateY(0); opacity: 0.9; }
-    50% { transform: translateX(40px) translateY(4px); opacity: 1; }
-    100% { transform: translateX(0) translateY(0); opacity: 0.9; }
+@keyframes orbitEightA {
+    0%   { transform: translate(0, 0); opacity: 0.9; }
+    25%  { transform: translate(28px, 8px); opacity: 1; }
+    50%  { transform: translate(44px, -4px); opacity: 0.9; }
+    75%  { transform: translate(20px, -10px); opacity: 1; }
+    100% { transform: translate(0, 0); opacity: 0.9; }
+}
+
+@keyframes orbitEightB {
+    0%   { transform: translate(0, 0); opacity: 0.9; }
+    25%  { transform: translate(-28px, -8px); opacity: 1; }
+    50%  { transform: translate(-44px, 4px); opacity: 0.9; }
+    75%  { transform: translate(-20px, 10px); opacity: 1; }
+    100% { transform: translate(0, 0); opacity: 0.9; }
 }
 
 .about-orbit {

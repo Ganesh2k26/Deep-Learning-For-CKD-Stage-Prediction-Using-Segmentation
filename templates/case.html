@@ -28,13 +28,13 @@
           <div class="alert alert-danger py-2">{{ error }}</div>
         {% endif %}
 
-        <form method="post">
+        <form method="post" data-show-loading="true">
           <div class="mb-3">
             <label class="form-label small">Case ID</label>
             <input type="text" name="case_id" class="form-control form-control-sm" placeholder="case_00050">
           </div>
           <div class="d-grid gap-2">
-            <button type="submit" class="btn btn-primary">Run analysis</button>
+            <button type="submit" class="btn btn-primary" data-loading-submit>Run analysis</button>
             <a href="{{ url_for('single_slice') }}" class="btn btn-outline-light">Single slice mode</a>
           </div>
         </form>

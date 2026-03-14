@@ -45,6 +45,15 @@
   </div>
 </nav>
 
+<!-- Global loading overlay (shown during analysis submits) -->
+<div class="loading-overlay d-none" id="loading-overlay" aria-hidden="true">
+  <div class="loading-card" role="status" aria-live="polite">
+    <div class="loading-spinner-lg mb-3"></div>
+    <div class="fw-semibold mb-1">Analyzing CT slice…</div>
+    <div class="small text-secondary">Segmenting kidney → extracting ROI → predicting CKD stage</div>
+  </div>
+</div>
+
 <main class="py-4">
   <div class="container">
     {% block content %}{% endblock %}
@@ -57,7 +66,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-  // Light JS polish: theme pulse + copy summary buttons
+  // Light JS polish: theme pulse + copy summary buttons + initial fade-in
   document.addEventListener("DOMContentLoaded", () => {
     const root = document.documentElement;
     const toggle = document.getElementById("toggle-theme");
@@ -90,13 +99,27 @@
         }
       });
     });
-    
-    // Add fade-in animation to content on load
-    document.addEventListener("DOMContentLoaded", () => {
-      const content = document.querySelector("main .container");
-      if (content) {
-        content.classList.add("fade-in");
-      }
+
+    const content = document.querySelector("main .container");
+    if (content) {
+      content.classList.add("fade-in");
+    }
+
+    // Show loading overlay for forms that opt-in.
+    const overlay = document.getElementById("loading-overlay");
+    document.querySelectorAll("form[data-show-loading='true']").forEach((form) => {
+      form.addEventListener("submit", () => {
+        if (!overlay) return;
+        overlay.classList.remove("d-none");
+        overlay.setAttribute("aria-hidden", "false");
+
+        const submitBtn = form.querySelector("[data-loading-submit]");
+        if (submitBtn) {
+          submitBtn.setAttribute("disabled", "disabled");
+          submitBtn.dataset.originalText = submitBtn.innerHTML;
+          submitBtn.innerHTML = "<span class='loading-spinner me-2' aria-hidden='true'></span>Analyzing…";
+        }
+      });
     });
   });
 </script>

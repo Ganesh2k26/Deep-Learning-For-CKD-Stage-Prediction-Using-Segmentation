@@ -1,4 +1,4 @@
-﻿/* ============================================
+/* ============================================
    ADVANCED UI - FAST, SMOOTH, MODERN
    ============================================ */
 
@@ -40,7 +40,7 @@ body {
 }
 
 body::before {
-    content: ;
+    content: "";
  position: fixed;
  inset: 0;
  pointer-events: none;
@@ -272,6 +272,38 @@ html { scroll-behavior: smooth; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(2, 6, 23, 0.66);
+  backdrop-filter: blur(10px);
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+}
+
+.loading-card {
+  width: min(520px, 92vw);
+  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: linear-gradient(145deg, rgba(15, 28, 58, 0.92), rgba(9, 18, 36, 0.92));
+  box-shadow: 0 26px 70px rgba(0, 0, 0, 0.55);
+  padding: 1.25rem 1.25rem;
+  text-align: center;
+}
+
+.loading-spinner-lg {
+  width: 54px;
+  height: 54px;
+  border-radius: 999px;
+  border: 5px solid rgba(255, 255, 255, 0.2);
+  border-top-color: var(--accent-cyan);
+  border-right-color: var(--accent-purple);
+  animation: spin 0.9s linear infinite;
+  margin: 0 auto;
+}
+
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 .fade-in { animation: fadeIn 0.4s ease-out; }
 
@@ -360,7 +392,7 @@ footer.footer {
 .timeline { border-left: 1.5px dashed rgba(255,255,255,0.18); padding-left: 1rem; }
 .timeline .item { position: relative; padding-left: 0.8rem; margin-bottom: 0.75rem; }
 .timeline .item::before {
- content: ;
+ content: "";
     position: absolute;
     left: -1.2rem;
     top: 6px;

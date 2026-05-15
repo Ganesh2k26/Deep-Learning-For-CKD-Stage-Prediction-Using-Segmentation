@@ -1,4 +1,4 @@
-<img width="591" height="525" alt="Screenshot 2026-03-14 210944" src="https://github.com/user-attachments/assets/94c0a063-d82b-4b28-aff1-9c7a66a127e3" /># CKD Stage Prediction - Deep Learning Project
+# CKD Stage Prediction - Deep Learning Project
 
 Deep learning system for Chronic Kidney Disease (CKD) stage prediction using CT scan segmentation and classification.
 
